@@ -92,7 +92,7 @@ class WavPlayer
         }
         is_open_ = true;
 
-        daisy::FileReader reader(&file_);
+        daisy::IReader reader(&file_);
         daisy::WavParser  parser;
         if(!parser.parse(reader))
             return Result::DiskError;
