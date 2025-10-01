@@ -220,17 +220,22 @@ class MidiHandler
     void Parse(uint8_t byte)
     {
         MidiEvent event;
+        byte_q_.PushBack(byte);
         if(parser_.Parse(byte, &event))
         {
             event_q_.PushBack(event);
         }
     }
 
+    bool HasRawPacket() const { return byte_q_.GetNumElements() > 0; }
+    uint8_t PopRawPacket() { return byte_q_.PopFront(); }
+
   private:
     Config               config_;
     Transport            transport_;
     MidiParser           parser_;
     FIFO<MidiEvent, 256> event_q_;
+    FIFO<uint8_t, 1024>  byte_q_;
 
     static void ParseCallback(uint8_t* data, size_t size, void* context)
     {
