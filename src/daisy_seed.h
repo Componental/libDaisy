@@ -177,7 +177,7 @@ class DaisySeed
   private:
     /** Local shorthand for debug log destination
     */
-    using Log = Logger<LOGGER_INTERNAL>;
+    using Log = Logger<LOGGER_EXTERNAL>;
 
     void ConfigureQspi();
     void ConfigureAudio();
