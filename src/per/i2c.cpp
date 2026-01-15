@@ -612,8 +612,10 @@ void I2CHandle::Impl::InitPins()
     GPIO_TypeDef*    port;
 
     GPIO_InitStruct.Mode  = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull  = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    //GPIO_InitStruct.Pull  = GPIO_NOPULL;
+    GPIO_InitStruct.Pull  = GPIO_PULLUP;
+    //GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
     switch(config_.periph)
     {
         case I2CHandle::Config::Peripheral::I2C_1:
