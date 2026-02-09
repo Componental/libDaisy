@@ -323,13 +323,14 @@ WARNINGS += -Wall -Wno-attributes -Wno-strict-aliasing -Wno-maybe-uninitialized 
 CPP_WARNINGS += -Wno-register
 
 # compile gcc flags
-ASFLAGS = $(MCU) $(AS_INCLUDES) $(AS_DEFS) -ggdb $(WARNINGS) $(OPT) -fdata-sections -ffunction-sections
+ASFLAGS = $(MCU) $(AS_INCLUDES) $(AS_DEFS) $(WARNINGS) $(OPT) -fdata-sections -ffunction-sections
 
-CFLAGS = $(MCU) $(C_INCLUDES) $(C_DEFS) -ggdb $(WARNINGS) $(OPT) -fasm -fdata-sections -ffunction-sections
+CFLAGS = $(MCU) $(C_INCLUDES) $(C_DEFS) $(WARNINGS) $(OPT) -fasm -fdata-sections -ffunction-sections
 
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -ggdb
-OPT = -O0
+ASFLAGS += -ggdb
+OPT = -O2
 C_DEFS += -DDEBUG=1
 else
 C_DEFS += -DNDEBUG=1 -DRELEASE=1
