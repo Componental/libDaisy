@@ -330,9 +330,10 @@ CFLAGS = $(MCU) $(C_INCLUDES) $(C_DEFS) $(WARNINGS) $(OPT) -fasm -fdata-sections
 ifeq ($(DEBUG), 1)
 CFLAGS += -g -ggdb
 ASFLAGS += -ggdb
-OPT = -O2
+OPT = -Os
 C_DEFS += -DDEBUG=1
 else
+OPT = -Os
 C_DEFS += -DNDEBUG=1 -DRELEASE=1
 endif
 
