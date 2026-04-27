@@ -36,6 +36,7 @@ struct AdcChannelConfig
         MUX_SEL_0,    /**< & */
         MUX_SEL_1,    /**< & */
         MUX_SEL_2,    /**< & */
+        MUX_SEL_3,    /**< & */
         MUX_SEL_LAST, /**< & */
     };
 
@@ -69,6 +70,7 @@ struct AdcChannelConfig
     \param mux_0 First mux pin
     \param mux_1 Second mux pin
     \param mux_2 Third mux pin
+    \param mux_3 Fourth mux pin
     \param speed conversion speed for this pin defaults to 8.5 cycles
     */
     void InitMux(Pin             adc_pin,
@@ -76,6 +78,7 @@ struct AdcChannelConfig
                  Pin             mux_0,
                  Pin             mux_1 = Pin(PORTX, 0),
                  Pin             mux_2 = Pin(PORTX, 0),
+                 Pin             mux_3 = Pin(PORTX, 0),
                  ConversionSpeed speed = SPEED_8CYCLES_5);
 
     GPIO            pin_;                   /**< & */
