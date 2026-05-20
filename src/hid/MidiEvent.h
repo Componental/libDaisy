@@ -1,4 +1,7 @@
 // TODO: make this adjustable
+#pragma once
+#ifndef DSY_MIDI_EVENT_H
+#define DSY_MIDI_EVENT_H
 #define SYSEX_BUFFER_LEN 128
 
 namespace daisy
@@ -435,3 +438,4 @@ struct MidiEvent
 
 /** @} */ // End midi
 } //namespace daisy
+#endif // DSY_MIDI_EVENT_H
