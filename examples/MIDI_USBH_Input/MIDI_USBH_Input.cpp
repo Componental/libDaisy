@@ -7,6 +7,8 @@
  */
 #include "daisy_seed.h"
 #include "usbh_midi.h"
+#include "src/dev/mcp23x17.h"
+#include "src/per/i2c.h"
 
 /** This prevents us from having to type "daisy::" in front of a lot of things. */
 using namespace daisy;
@@ -15,6 +17,8 @@ using namespace daisy;
 DaisySeed       hw;
 MidiUsbHandler midi;
 USBHostHandle usbHost;
+daisy::Mcp23017 expander;
+daisy::I2CHandle i2c;
 
 /** FIFO to hold messages as we're ready to print them */
 FIFO<MidiEvent, 128> event_log;
@@ -51,7 +55,35 @@ int main(void)
     /** Initialize our hardware */
     hw.Init();
 
-    hw.StartLog(true);
+    hw.StartLog(false);
+
+    daisy::I2CHandle::Config i2c_config;
+    i2c_config.speed = daisy::I2CHandle::Config::Speed::I2C_400KHZ;
+    i2c_config.mode = daisy::I2CHandle::Config::Mode::I2C_MASTER;
+    i2c_config.periph = daisy::I2CHandle::Config::Peripheral::I2C_1;
+    i2c_config.pin_config.scl = {daisy::GPIOPort::PORTB, 8};
+    i2c_config.pin_config.sda = {daisy::GPIOPort::PORTB, 9};
+
+    if (i2c.Init(i2c_config) != daisy::I2CHandle::Result::OK)
+    {
+        hw.PrintLine("I2C Init failed");
+    }
+
+    // i2c Expander Init
+    daisy::Mcp23017::Config expander_cfg;
+    expander_cfg.transport_config.i2c_address = 0x20;
+    expander_cfg.transport_config.i2c_config = i2c.GetConfig();
+    expander_cfg.transport_config.i2c_config.speed = daisy::I2CHandle::Config::Speed::I2C_400KHZ;
+    expander.Init(expander_cfg);
+
+    expander.PinMode((uint8_t)2, daisy::MCPMode::OUTPUT, false);
+
+    expander.WritePin(2, 1);
+
+
+    daisy::System::Delay(10);
+    expander.PortMode(daisy::MCPPort::A, 0x00, 0xFF, 0x00);
+    expander.PortMode(daisy::MCPPort::B, 0xFF, 0xFF, 0x00);
 
     hw.PrintLine("MIDI USB Host start");
 

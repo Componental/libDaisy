@@ -403,6 +403,9 @@ class SSD130xDriver
     */
     bool UpdateFinished() { return true; }
 
+    const uint8_t *GetBuffer() const { return buffer_; }
+    static constexpr size_t BufferSize() { return width * height / 8; }
+
   protected:
     Transport transport_;
     uint8_t   buffer_[width * height / 8];
