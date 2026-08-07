@@ -72,12 +72,22 @@ class TimerHandle
         uint32_t period;
         bool     enable_irq; /**< Enable interrupt for user based callback */
 
+        /** @brief NVIC preemption priority for this timer's IRQ, only used when
+         *   enable_irq is true. Lower value = higher priority (0 is the highest
+         *   possible on this device; the system priority grouping reserves all
+         *   4 bits for preemption, none for subpriority, so this is true
+         *   hardware preemption between two TIM instances at different values).
+         *   Defaults to 0x0f (lowest) to match this driver's previous
+         *   hardcoded-per-instance behavior for every TIM peripheral. */
+        uint8_t irqPriority;
+
         /* @brief Constructor for default states */
         Config()
         : periph(Peripheral::TIM_2),
           dir(CounterDir::UP),
           period(0xffffffff),
-          enable_irq(false)
+          enable_irq(false),
+          irqPriority(0x0f)
         {
         }
     };

@@ -262,7 +262,7 @@ extern "C"
             __HAL_RCC_TIM2_CLK_ENABLE();
             if(cfg.enable_irq)
             {
-                HAL_NVIC_SetPriority(TIM2_IRQn, 0x0f, 0);
+                HAL_NVIC_SetPriority(TIM2_IRQn, cfg.irqPriority, 0);
                 HAL_NVIC_EnableIRQ(TIM2_IRQn);
             }
         }
@@ -271,7 +271,7 @@ extern "C"
             __HAL_RCC_TIM3_CLK_ENABLE();
             if(cfg.enable_irq)
             {
-                HAL_NVIC_SetPriority(TIM3_IRQn, 0x0f, 0);
+                HAL_NVIC_SetPriority(TIM3_IRQn, cfg.irqPriority, 0);
                 HAL_NVIC_EnableIRQ(TIM3_IRQn);
             }
         }
@@ -280,7 +280,7 @@ extern "C"
             __HAL_RCC_TIM4_CLK_ENABLE();
             if(cfg.enable_irq)
             {
-                HAL_NVIC_SetPriority(TIM4_IRQn, 0x0f, 0);
+                HAL_NVIC_SetPriority(TIM4_IRQn, cfg.irqPriority, 0);
                 HAL_NVIC_EnableIRQ(TIM4_IRQn);
             }
         }
@@ -290,7 +290,7 @@ extern "C"
             /** @todo make this conditional based on user config */
             if(cfg.enable_irq)
             {
-                HAL_NVIC_SetPriority(TIM5_IRQn, 0x0f, 0);
+                HAL_NVIC_SetPriority(TIM5_IRQn, cfg.irqPriority, 0);
                 HAL_NVIC_EnableIRQ(TIM5_IRQn);
             }
         }
