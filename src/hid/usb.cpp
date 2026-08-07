@@ -131,6 +131,15 @@ UsbHandle::Result UsbHandle::TransmitExternal(uint8_t* buff, size_t size)
     return CDC_Transmit_HS(buff, size) == USBD_OK ? Result::OK : Result::ERR;
 }
 
+bool UsbHandle::IsTxBusyInternal()
+{
+    return CDC_IsTxBusy_FS() != 0;
+}
+bool UsbHandle::IsTxBusyExternal()
+{
+    return CDC_IsTxBusy_HS() != 0;
+}
+
 void UsbHandle::SetReceiveCallback(ReceiveCallback cb, UsbPeriph dev)
 {
     // This is pretty silly, but we're working iteritavely...

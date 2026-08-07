@@ -224,6 +224,9 @@ class MidiHandler
         transport_.Tx(bytes, size);
     }
 
+    // return true if busy, false if free (or if the transport has no concept of busy)
+    bool IsTxBusy() { return transport_.IsTxBusy(); }
+
     /** Feed in bytes to parser state machine from an external source.
         Populates internal FIFO queue with MIDI Messages.
 

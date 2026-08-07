@@ -114,6 +114,8 @@ extern "C"
     void    CDC_Set_Rx_Callback_HS(CDC_ReceiveCallback cb); /**< & */
     uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len);    /**< & */
     uint8_t CDC_Transmit_HS(uint8_t* Buf, uint16_t Len);    /**< & */
+    uint8_t CDC_IsTxBusy_FS(void); /**< Read-only, non-transmitting: 1 if a prior CDC_Transmit_FS is still in flight */
+    uint8_t CDC_IsTxBusy_HS(void); /**< Read-only, non-transmitting: 1 if a prior CDC_Transmit_HS is still in flight */
 
     /* USER CODE BEGIN EXPORTED_FUNCTIONS */
 

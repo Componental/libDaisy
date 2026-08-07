@@ -311,6 +311,21 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
 }
 
 /**
+  * @brief  CDC_IsTxBusy_FS
+  *         Read-only check of the CDC IN endpoint's in-flight transfer state.
+  *         Returns 1 if a previous CDC_Transmit_FS() is still awaiting host
+  *         completion (i.e. the next CDC_Transmit_FS() would return
+  *         USBD_BUSY), 0 if the endpoint is free. Never transmits.
+  * @retval 1 if busy, 0 if free
+  */
+uint8_t CDC_IsTxBusy_FS(void)
+{
+    USBD_CDC_HandleTypeDef* hcdc
+        = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+    return (hcdc->TxState != 0) ? 1U : 0U;
+}
+
+/**
   * @brief  Initializes the CDC media low layer over the USB HS IP
   * @retval USBD_OK if all operations are OK else USBD_FAIL
   */
@@ -444,6 +459,21 @@ uint8_t CDC_Transmit_HS(uint8_t* Buf, uint16_t Len)
     result = USBD_CDC_TransmitPacket(&hUsbDeviceHS);
     /* USER CODE END 12 */
     return result;
+}
+
+/**
+  * @brief  CDC_IsTxBusy_HS
+  *         Read-only check of the CDC IN endpoint's in-flight transfer state.
+  *         Returns 1 if a previous CDC_Transmit_HS() is still awaiting host
+  *         completion (i.e. the next CDC_Transmit_HS() would return
+  *         USBD_BUSY), 0 if the endpoint is free. Never transmits.
+  * @retval 1 if busy, 0 if free
+  */
+uint8_t CDC_IsTxBusy_HS(void)
+{
+    USBD_CDC_HandleTypeDef* hcdc
+        = (USBD_CDC_HandleTypeDef*)hUsbDeviceHS.pClassData;
+    return (hcdc->TxState != 0) ? 1U : 0U;
 }
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_IMPLEMENTATION */

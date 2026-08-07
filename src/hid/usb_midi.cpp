@@ -29,6 +29,7 @@ class MidiUsbTransport::Impl
     bool RxActive() { return rx_active_; }
     void FlushRx() { rx_buffer_.Flush(); }
     void Tx(uint8_t* buffer, size_t size);
+    bool IsTxBusy();
 
     void UsbToMidi(uint8_t* buffer, uint8_t length);
     void MidiToUsb(uint8_t* buffer, size_t length);
@@ -158,6 +159,15 @@ void MidiUsbTransport::Impl::Tx(uint8_t* buffer, size_t size)
     } while(should_retry);
 
     tx_ptr_ = 0;
+}
+
+bool MidiUsbTransport::Impl::IsTxBusy()
+{
+    if(config_.periph == Config::HOST)
+        return false;
+
+    return config_.periph == Config::EXTERNAL ? usb_handle_.IsTxBusyExternal()
+                                               : usb_handle_.IsTxBusyInternal();
 }
 
 void MidiUsbTransport::Impl::UsbToMidi(uint8_t* buffer, uint8_t length)
@@ -359,4 +369,9 @@ void MidiUsbTransport::FlushRx()
 void MidiUsbTransport::Tx(uint8_t* buffer, size_t size)
 {
     pimpl_->Tx(buffer, size);
+}
+
+bool MidiUsbTransport::IsTxBusy()
+{
+    return pimpl_->IsTxBusy();
 }

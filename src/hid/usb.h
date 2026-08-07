@@ -63,6 +63,21 @@ class UsbHandle
     */
     Result TransmitExternal(uint8_t* buff, size_t size);
 
+    /** Non-transmitting, read-only check of the internal (FS) CDC endpoint's
+    in-flight transfer state: true if a previous TransmitInternal() call is
+    still awaiting host completion (i.e. the next TransmitInternal() would
+    return Result::ERR because the class driver reports USBD_BUSY).
+    \return true if busy, false if free
+     */
+    bool IsTxBusyInternal();
+    /** Non-transmitting, read-only check of the external (HS) CDC endpoint's
+    in-flight transfer state: true if a previous TransmitExternal() call is
+    still awaiting host completion (i.e. the next TransmitExternal() would
+    return Result::ERR because the class driver reports USBD_BUSY).
+    \return true if busy, false if free
+     */
+    bool IsTxBusyExternal();
+
     /** sets the callback to be called upon reception of new data
     \param cb Function to serve as callback
     \param dev Device to set callback for
