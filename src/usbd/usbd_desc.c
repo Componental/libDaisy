@@ -66,7 +66,8 @@
 // BOTH
 #define USBD_VID 1155
 #define USBD_LANGID_STRING 1033
-#define USBD_MANUFACTURER_STRING "Electrosmith"
+//#define USBD_MANUFACTURER_STRING "Electrosmith"
+#define USBD_MANUFACTURER_STRING "Componental"
 // HS
 #define USBD_PID_HS 22336 // replace with our PID when we have one.
 //#define USBD_PRODUCT_STRING_HS "Daisy Seed External"
