@@ -568,6 +568,10 @@ uint8_t *USBD_FS_InterfaceStrDescriptor(USBD_SpeedTypeDef speed,
   * @param  None 
   * @retval None
   */
+#define USB_SERIAL_HEX_CHARS 24
+_Static_assert(USB_SIZ_STRING_SERIAL == 2 + 2 * USB_SERIAL_HEX_CHARS,
+               "USB_SIZ_STRING_SERIAL must match the 24 hex chars Get_SerialNum writes");
+
 static void Get_SerialNum(void)
 {
     /* Emit the full 96-bit STM32 UID as 24 hex characters, laid out so that
