@@ -51,7 +51,7 @@ extern "C"
 #define DEVICE_ID2 (UID_BASE + 0x4) /**< & */
 #define DEVICE_ID3 (UID_BASE + 0x8) /**< & */
 
-#define USB_SIZ_STRING_SERIAL 0x1A /**< & */
+#define USB_SIZ_STRING_SERIAL 0x32 /* 2 + 24 UTF-16 chars: full 96-bit UID */ /**< & */
 
     /* USER CODE BEGIN EXPORTED_CONSTANTS */
 

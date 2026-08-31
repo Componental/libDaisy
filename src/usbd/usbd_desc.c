@@ -568,20 +568,35 @@ uint8_t *USBD_FS_InterfaceStrDescriptor(USBD_SpeedTypeDef speed,
   * @param  None 
   * @retval None
   */
+#define USB_SERIAL_HEX_CHARS 24
+_Static_assert(USB_SIZ_STRING_SERIAL == 2 + 2 * USB_SERIAL_HEX_CHARS,
+               "USB_SIZ_STRING_SERIAL must match the 24 hex chars Get_SerialNum writes");
+
 static void Get_SerialNum(void)
 {
-    uint32_t deviceserial0, deviceserial1, deviceserial2;
+    /* Emit the full 96-bit STM32 UID as 24 hex characters, laid out so that
+     * the first 12 characters are byte-identical to the legacy 48-bit serial
+     * (hex8(w0 + w2) . hex4(w1[31:16])). Devices registered under the old
+     * format can therefore be matched by prefix, and a bootloader that still
+     * emits the short form reports a prefix of what the application reports.
+     *
+     *   chars  0- 7 : w0 + w2   (legacy field 1)
+     *   chars  8-15 : w1        (bits 31:16 = legacy field 2; bits 7:0 = wafer number)
+     *   chars 16-23 : w2        (lot number, high part)
+     *
+     * All three words are recoverable: w2 = chars 16-23, w1 = chars 8-15,
+     * w0 = chars 0-7 - w2 (mod 2^32). The wafer number, which the legacy
+     * serial discarded entirely, lives in chars 14-15. */
+    uint32_t w0 = *(uint32_t *)DEVICE_ID1;
+    uint32_t w1 = *(uint32_t *)DEVICE_ID2;
+    uint32_t w2 = *(uint32_t *)DEVICE_ID3;
+    uint32_t legacy = w0 + w2;
 
-    deviceserial0 = *(uint32_t *)DEVICE_ID1;
-    deviceserial1 = *(uint32_t *)DEVICE_ID2;
-    deviceserial2 = *(uint32_t *)DEVICE_ID3;
-
-    deviceserial0 += deviceserial2;
-
-    if(deviceserial0 != 0)
+    if(legacy != 0)
     {
-        IntToUnicode(deviceserial0, &USBD_StringSerial[2], 8);
-        IntToUnicode(deviceserial1, &USBD_StringSerial[18], 4);
+        IntToUnicode(legacy, &USBD_StringSerial[2], 8);
+        IntToUnicode(w1, &USBD_StringSerial[18], 8);
+        IntToUnicode(w2, &USBD_StringSerial[34], 8);
     }
 }
 
