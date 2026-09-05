@@ -326,29 +326,22 @@ UartHandler::Result UartHandler::Impl::SetDmaPeripheral()
 
 UartHandler::Result UartHandler::Impl::InitDma(bool rx, bool tx)
 {
-    hdma_rx_.Instance                 = DMA1_Stream5;
-    hdma_rx_.Init.PeriphInc           = DMA_PINC_DISABLE;
-    hdma_rx_.Init.MemInc              = DMA_MINC_ENABLE;
-    hdma_rx_.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    hdma_rx_.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-    hdma_rx_.Init.Mode                = DMA_NORMAL;
-    hdma_rx_.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
-    hdma_rx_.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
-    hdma_rx_.Init.Direction           = DMA_PERIPH_TO_MEMORY;
-
-    hdma_tx_.Instance                 = DMA2_Stream4;
-    hdma_tx_.Init.PeriphInc           = DMA_PINC_DISABLE;
-    hdma_tx_.Init.MemInc              = DMA_MINC_ENABLE;
-    hdma_tx_.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    hdma_tx_.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
-    hdma_tx_.Init.Mode                = DMA_NORMAL;
-    hdma_tx_.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
-    hdma_tx_.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
-    hdma_tx_.Init.Direction           = DMA_MEMORY_TO_PERIPH;
-    SetDmaPeripheral();
-
+    // Only touch the handle we are going to (re)initialise. A TX started while the circular
+    // RX listener runs must not rewrite hdma_rx_.Init.Mode to DMA_NORMAL: the HAL reads
+    // hdmarx->Init.Mode in UART_DMAReceiveCplt() and would stop the listener at the next
+    // buffer wrap (RxState -> READY, DMAR cleared).
     if(rx)
     {
+        hdma_rx_.Instance                 = DMA1_Stream5;
+        hdma_rx_.Init.PeriphInc           = DMA_PINC_DISABLE;
+        hdma_rx_.Init.MemInc              = DMA_MINC_ENABLE;
+        hdma_rx_.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+        hdma_rx_.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+        hdma_rx_.Init.Mode                = DMA_NORMAL;
+        hdma_rx_.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
+        hdma_rx_.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+        hdma_rx_.Init.Direction           = DMA_PERIPH_TO_MEMORY;
+        SetDmaPeripheral();
         if(HAL_DMA_Init(&hdma_rx_) != HAL_OK)
         {
             Error_Handler();
@@ -359,6 +352,16 @@ UartHandler::Result UartHandler::Impl::InitDma(bool rx, bool tx)
 
     if(tx)
     {
+        hdma_tx_.Instance                 = DMA2_Stream4;
+        hdma_tx_.Init.PeriphInc           = DMA_PINC_DISABLE;
+        hdma_tx_.Init.MemInc              = DMA_MINC_ENABLE;
+        hdma_tx_.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+        hdma_tx_.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+        hdma_tx_.Init.Mode                = DMA_NORMAL;
+        hdma_tx_.Init.Priority            = DMA_PRIORITY_VERY_HIGH;
+        hdma_tx_.Init.FIFOMode            = DMA_FIFOMODE_DISABLE;
+        hdma_tx_.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+        SetDmaPeripheral(); // writes Init.Request of both handles; only read by HAL_DMA_Init
         if(HAL_DMA_Init(&hdma_tx_) != HAL_OK)
         {
             Error_Handler();
@@ -374,12 +377,20 @@ void UartHandler::Impl::DmaTransferFinished(UART_HandleTypeDef* huart,
                                             UartHandler::Result result)
 {
     ScopedIrqBlocker block;
+    UartHandler::Impl* handle = MapInstanceToHandle(huart->Instance);
 
     // on an error, reinit the peripheral to clear any flags
     if(result != UartHandler::Result::OK)
         HAL_UART_Init(huart);
 
-    dma_active_peripheral_ = -1;
+    // A circular RX listener (DmaListenStart) owns dma_active_peripheral_ for as long as it
+    // listens: DMA1_Stream5_IRQHandler routes HAL_DMA_IRQHandler through it. Hand the claim
+    // back to the listener instead of clearing it, otherwise the RX stream's HT/TC flags are
+    // never serviced again after the first TX (IRQ storm on DMA1_Stream5).
+    if(handle != nullptr && handle->listener_mode_)
+        dma_active_peripheral_ = int(handle->config_.periph);
+    else
+        dma_active_peripheral_ = -1;
 
     if(next_end_callback_ != nullptr)
     {
@@ -441,11 +452,19 @@ bool UartHandler::Impl::IsDmaTransferQueuedFor(size_t uart_idx)
 void UartHandler::Impl::QueueDmaTransfer(size_t uart_idx, const UartDmaJob& job)
 {
     // wait for any previous job on this peripheral to finish
-    // and the queue position to become free
-    while(IsDmaTransferQueuedFor(uart_idx))
+    // and the queue position to become free.
+    // The wait is only legal from thread context with interrupts enabled: the slot is freed
+    // by DmaTransferFinished (USART/DMA IRQ), so spinning from an ISR or under PRIMASK would
+    // never return. From those contexts the job overwrites the slot (the behaviour the
+    // original code had in practice: its side-effect-free loop was removed by the compiler).
+    // The barrier keeps this spin from being optimised away.
+    if(__get_IPSR() == 0 && !__get_PRIMASK())
     {
-        continue;
-    };
+        while(IsDmaTransferQueuedFor(uart_idx))
+        {
+            __asm volatile("" ::: "memory");
+        }
+    }
 
     // queue the job
     ScopedIrqBlocker block;
@@ -460,8 +479,13 @@ UartHandler::Result UartHandler::Impl::DmaTransmit(
     UartHandler::EndCallbackFunctionPtr   end_callback,
     void*                                 callback_context)
 {
-    // if dma is currently running - queue a job
-    if(IsDmaBusy())
+    // The RX listener parks dma_active_peripheral_ on its own peripheral while it runs.
+    // TX lives on a different stream (DMA2_Stream4 vs DMA1_Stream5), so a transmit on the
+    // *listening* peripheral only has to wait for a TX that is really in flight
+    // (huart_.gState, checked in StartDmaTx). Everything else keeps the old queue behaviour.
+    const bool own_listener
+        = listener_mode_ && dma_active_peripheral_ == int(config_.periph);
+    if(IsDmaBusy() && !own_listener)
     {
         UartDmaJob job;
         job.data_tx          = buff;
@@ -538,6 +562,10 @@ UartHandler::Result UartHandler::Impl::DmaListenStop()
     /** Stop DMA */
     if(HAL_UART_DMAStop(&huart_) != HAL_OK)
         return UartHandler::Result::ERR;
+    /** Release the scheduler claim the listener held (see DmaTransferFinished), otherwise
+     *  every later DmaTransmit on any UART is queued and never started. */
+    if(dma_active_peripheral_ == int(config_.periph))
+        dma_active_peripheral_ = -1;
     return UartHandler::Result::OK;
 }
 
@@ -553,7 +581,12 @@ UartHandler::Result UartHandler::Impl::StartDmaTx(
     UartHandler::EndCallbackFunctionPtr   end_callback,
     void*                                 callback_context)
 {
-    while(HAL_UART_GetState(&huart_) != HAL_UART_STATE_READY) {};
+    // HAL_UART_GetState() returns gState | RxState. RxState is BUSY_RX for the whole life of
+    // a DmaListenStart(), so the old wait could never return while listening. Only the TX
+    // half matters here, and this may run from an ISR: report "busy" instead of spinning.
+    // Nothing has been started and no callback is invoked when ERR is returned here.
+    if(huart_.gState != HAL_UART_STATE_READY)
+        return UartHandler::Result::ERR;
 
     if(InitDma(false, true) != UartHandler::Result::OK)
     {
@@ -573,7 +606,8 @@ UartHandler::Result UartHandler::Impl::StartDmaTx(
 
     if(HAL_UART_Transmit_DMA(&huart_, buff, size) != HAL_OK)
     {
-        dma_active_peripheral_ = -1;
+        // keep the claim if the RX listener owns it (see DmaTransferFinished)
+        dma_active_peripheral_ = listener_mode_ ? int(config_.periph) : -1;
         next_end_callback_     = NULL;
         next_callback_context_ = NULL;
         if(end_callback)
