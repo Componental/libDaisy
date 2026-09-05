@@ -6,6 +6,15 @@
 #include <cstdint>
 #include "per/tim.h"
 
+extern "C"
+{
+    /** Override point for an application that runs its own USB device stack on OTG_HS.
+     *  The three OTG_HS_*_IRQHandler (not OTG_HS_WKUP) call this first; the default is a
+     *  weak function returning false, after which the ST HAL handlers run as always. Define
+     *  it (with C linkage) returning true to service the interrupt yourself. */
+    bool dsy_otg_hs_irq_override(void);
+}
+
 namespace daisy
 {
 /** A handle for interacting with the Core System.
