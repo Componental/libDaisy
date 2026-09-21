@@ -30,6 +30,12 @@ class MidiTestTransport
     }
     uint8_t Rx() { return 1; }
     bool    RxActive() { return true; }
+    void    SetRxFlowControl(size_t (*queue_free)(void*), void* context)
+    {
+        UNUSED(queue_free);
+        UNUSED(context);
+    }
+    bool ResumeRx() { return false; }
 
   private:
 };
@@ -492,6 +498,48 @@ TEST_F(MidiTest, sysexEnd)
     EXPECT_EQ(event.type, SystemCommon);
     EXPECT_EQ(event.sc_type, SysExEnd);
     EXPECT_FALSE(midi.HasEvents());
+}
+
+// ================ Event queue: room and drops ================
+
+TEST_F(MidiTest, queueFreeAndDroppedEventCount)
+{
+    const size_t capacity = MidiHandler<MidiTestTransport>::kEventQueueSize;
+    EXPECT_EQ(midi.QueueFree(), capacity);
+    EXPECT_EQ(midi.GetDroppedEventCount(), 0u);
+
+    uint8_t noteOn[] = {0x90, 60, 100};
+    for(size_t i = 0; i < capacity; i++)
+        Parse(noteOn, 3);
+    EXPECT_EQ(midi.QueueFree(), 0u);
+    EXPECT_EQ(midi.GetDroppedEventCount(), 0u);
+
+    // Beyond capacity nothing fits: counted, not queued, and never silent.
+    Parse(noteOn, 3);
+    Parse(noteOn, 3);
+    EXPECT_EQ(midi.QueueFree(), 0u);
+    EXPECT_EQ(midi.GetDroppedEventCount(), 2u);
+
+    midi.PopEvent();
+    EXPECT_EQ(midi.QueueFree(), 1u);
+    Parse(noteOn, 3);
+    EXPECT_EQ(midi.QueueFree(), 0u);
+    EXPECT_EQ(midi.GetDroppedEventCount(), 2u);
+
+    // Realtime messages bypass the queue when a callback is registered, so
+    // they are neither queued nor dropped by a full queue.
+    size_t rt = 0;
+    midi.StartReceiveRt([&rt](MidiEvent&) { rt++; });
+    uint8_t clock[] = {0xF8};
+    Parse(clock, 1);
+    EXPECT_EQ(rt, 1u);
+    EXPECT_EQ(midi.GetDroppedEventCount(), 2u);
+
+    while(midi.HasEvents())
+        midi.PopEvent();
+    EXPECT_EQ(midi.QueueFree(), capacity);
+    midi.ResumeRx(); // test transport never holds
+    EXPECT_EQ(midi.GetRxHoldCount(), 0u);
 }
 
 // ================ System Real Time Messages ================

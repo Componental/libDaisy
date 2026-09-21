@@ -103,6 +103,17 @@ class MidiUartTransport
     /** @brief This is a no-op for UART transport - Rx is via DMA callback with circular buffer */
     inline void FlushRx() {}
 
+    /** @brief No-op: a UART cannot hold the sender back, bytes arrive whether or
+     *  not the MidiHandler's queue has room (see MidiHandler::QueueFree). */
+    inline void SetRxFlowControl(size_t (*queue_free)(void*), void* context)
+    {
+        (void)queue_free;
+        (void)context;
+    }
+
+    /** @brief No-op for UART transport (see SetRxFlowControl); never held. */
+    inline bool ResumeRx() { return false; }
+
     /** @brief sends the buffer of bytes out of the UART peripheral */
     inline void Tx(uint8_t* buff, size_t size) { uart_.PollTx(buff, size); }
 
@@ -177,6 +188,7 @@ class MidiHandler
      * MidiEvent Queue will begin to fill, and can be checked with HasEvents() */
     void StartReceive()
     {
+        transport_.SetRxFlowControl(MidiHandler::QueueFreeOf, this);
         transport_.StartRx(MidiHandler::ParseCallback, this);
     }
 
@@ -187,7 +199,38 @@ class MidiHandler
     void StartReceiveRt(MidiEventCallback callback_for_rt_messages)
     {
         realtime_callback_ = callback_for_rt_messages;
+        transport_.SetRxFlowControl(MidiHandler::QueueFreeOf, this);
         transport_.StartRx(MidiHandler::ParseCallback, this);
+    }
+
+    /** Number of events the queue holds. Parse() drops what does not fit. */
+    static constexpr size_t kEventQueueSize = 256;
+
+    /** Events the queue can still take before Parse() has to drop one.
+     *  A transport that can hold the sender back (USB: the OUT endpoint is
+     *  left un-armed, the host sees NAK and waits) reads this through the
+     *  callback it was given in SetRxFlowControl() and stops taking bytes in
+     *  time, so nothing is lost. */
+    size_t QueueFree() const
+    {
+        return kEventQueueSize - event_q_.GetNumElements();
+    }
+
+    /** Events Parse() dropped because the queue was full. Never reset. With
+     *  a flow-controlled transport this stays at zero; a value above zero is
+     *  a defect, not a statistic. */
+    uint32_t GetDroppedEventCount() const { return dropped_events_; }
+
+    /** Times ResumeRx() released a transport that was holding the sender. */
+    uint32_t GetRxHoldCount() const { return rx_holds_; }
+
+    /** Call after popping events: lets a transport that stopped taking bytes
+     *  for lack of queue room (see QueueFree()) read on. Safe to call every
+     *  time; it does nothing unless the transport is holding. */
+    void ResumeRx()
+    {
+        if(transport_.ResumeRx())
+            rx_holds_++;
     }
 
     /** Start listening */
@@ -246,17 +289,25 @@ class MidiHandler
                     return;
                 }
             }
-            event_q_.PushBack(event);
+            if(!event_q_.PushBack(event))
+                dropped_events_++;
             return;
         }
     }
 
   private:
-    Config               config_;
-    Transport            transport_;
-    MidiParser           parser_;
-    FIFO<MidiEvent, 256> event_q_;
-    MidiEventCallback    realtime_callback_;
+    Config                            config_;
+    Transport                         transport_;
+    MidiParser                        parser_;
+    FIFO<MidiEvent, kEventQueueSize>  event_q_;
+    MidiEventCallback                 realtime_callback_;
+    uint32_t                          dropped_events_ = 0;
+    uint32_t                          rx_holds_       = 0;
+
+    static size_t QueueFreeOf(void* context)
+    {
+        return reinterpret_cast<MidiHandler*>(context)->QueueFree();
+    }
 
     static void ParseCallback(uint8_t* data, size_t size, void* context)
     {
