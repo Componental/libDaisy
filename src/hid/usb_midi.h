@@ -52,6 +52,21 @@ class MidiUsbTransport
     void Tx(uint8_t* buffer, size_t size);
     bool IsTxBusy();
 
+    /** Flow control. queue_free(context) returns how many events the MIDI
+     *  handler's queue can still take. After each packet the transport leaves
+     *  the OUT endpoint un-armed when fewer than a packet's worth of events
+     *  fit: the host sees NAK and waits, and ResumeRx() re-arms once there is
+     *  room. Without it the queue overflows silently. Ignored in HOST mode.
+     *  MidiHandler calls this from StartReceive(). */
+    void SetRxFlowControl(size_t (*queue_free)(void*), void* context);
+
+    /** Re-arms reception if it was held for lack of queue room and there is
+     *  room now. Returns true when reception was resumed. */
+    bool ResumeRx();
+
+    /** True while the OUT endpoint is held (the host is being NAKed). */
+    bool RxHeld();
+
     class Impl;
 
     MidiUsbTransport() : pimpl_(nullptr) {}

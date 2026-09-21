@@ -116,6 +116,13 @@ extern "C"
     uint8_t CDC_Transmit_HS(uint8_t* Buf, uint16_t Len);    /**< & */
     uint8_t CDC_IsTxBusy_FS(void); /**< Read-only, non-transmitting: 1 if a prior CDC_Transmit_FS is still in flight */
     uint8_t CDC_IsTxBusy_HS(void); /**< Read-only, non-transmitting: 1 if a prior CDC_Transmit_HS is still in flight */
+    /** Receive flow control. With hold set, the OUT endpoint is not re-armed after the
+     *  next packet: the host sees NAK and waits. Call from the receive callback. */
+    void CDC_Set_Rx_Hold_FS(uint8_t hold);
+    void CDC_Set_Rx_Hold_HS(uint8_t hold);
+    /** Clears the hold and re-arms the endpoint if a packet was held back. */
+    void CDC_Rx_Resume_FS(void);
+    void CDC_Rx_Resume_HS(void);
 
     /* USER CODE BEGIN EXPORTED_FUNCTIONS */
 
