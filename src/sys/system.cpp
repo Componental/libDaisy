@@ -94,11 +94,21 @@ extern "C"
     }
 
     /** USB IRQ Handlers since they are shared resources for multiple classes */
+
+    /** Override point for an application that runs its own USB device stack on
+     *  OTG_HS (libDubby with TinyUSB). The default returns false and the handlers
+     *  below run the ST HAL as always; a strong definition in the application
+     *  that services the interrupt itself returns true. A hook is used instead
+     *  of weak handlers because the startup file also carries weak handlers and
+     *  the linker would pick whichever it saw first. */
+    __attribute__((weak)) bool dsy_otg_hs_irq_override(void) { return false; }
     extern HCD_HandleTypeDef hhcd_USB_OTG_HS;
     extern PCD_HandleTypeDef hpcd_USB_OTG_HS;
 
     void OTG_HS_EP1_OUT_IRQHandler(void)
     {
+        if(dsy_otg_hs_irq_override())
+            return;
         if(hhcd_USB_OTG_HS.Instance)
             HAL_HCD_IRQHandler(&hhcd_USB_OTG_HS);
         if(hpcd_USB_OTG_HS.Instance)
@@ -107,6 +117,8 @@ extern "C"
 
     void OTG_HS_EP1_IN_IRQHandler(void)
     {
+        if(dsy_otg_hs_irq_override())
+            return;
         if(hhcd_USB_OTG_HS.Instance)
             HAL_HCD_IRQHandler(&hhcd_USB_OTG_HS);
         if(hpcd_USB_OTG_HS.Instance)
@@ -115,6 +127,8 @@ extern "C"
 
     void OTG_HS_IRQHandler(void)
     {
+        if(dsy_otg_hs_irq_override())
+            return;
         if(hhcd_USB_OTG_HS.Instance)
             HAL_HCD_IRQHandler(&hhcd_USB_OTG_HS);
         if(hpcd_USB_OTG_HS.Instance)

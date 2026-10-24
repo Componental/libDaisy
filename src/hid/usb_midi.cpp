@@ -1,5 +1,6 @@
 #include "system.h"
 #include "usbd_cdc.h"
+#include "usbd_cdc_if.h"
 #include "usbh_midi.h"
 #include "hid/usb_midi.h"
 #include <cassert>
@@ -35,16 +36,59 @@ class MidiUsbTransport::Impl
     void MidiToUsb(uint8_t* buffer, size_t length);
     void Parse();
 
+    void SetRxFlowControl(size_t (*queue_free)(void*), void* context)
+    {
+        queue_free_     = queue_free;
+        queue_free_ctx_ = context;
+    }
+
+    bool RxHeld() { return rx_held_; }
+
+    /** End of ReceiveCallback (OTG interrupt): the packet just parsed is in the
+     *  queue; decide whether the next one may come. One full-speed packet is 64
+     *  bytes = 16 USB-MIDI packets = at most 16 events, so that is the room we
+     *  need. When it is not there the class driver leaves the endpoint un-armed
+     *  (CDC_Set_Rx_Hold) and the host waits; nothing is dropped. */
+    void HoldIfQueueFull()
+    {
+        if(config_.periph == Config::HOST || !queue_free_)
+            return;
+        if(queue_free_(queue_free_ctx_) < kMaxPacketEvents)
+        {
+            rx_held_ = true;
+            SetCdcRxHold(1);
+        }
+    }
+
+    /** Called from the consumer after it popped events. While rx_held_ is true
+     *  no OUT transfer is in flight, so nothing races the re-arm. */
+    bool ResumeRx()
+    {
+        if(!rx_held_)
+            return false;
+        if(queue_free_ && queue_free_(queue_free_ctx_) < kMaxPacketEvents)
+            return false; // still no room; the next call tries again
+        rx_held_ = false;
+        CdcRxResume();
+        return true;
+    }
+
   private:
     void MidiToUsbSingle(uint8_t* buffer, size_t length);
+    void SetCdcRxHold(uint8_t hold);
+    void CdcRxResume();
 
     /** USB Handle for CDC transfers
          */
     UsbHandle usb_handle_;
     Config    config_;
 
-    static constexpr size_t kBufferSize = 1024;
+    static constexpr size_t kBufferSize     = 1024;
+    static constexpr size_t kMaxPacketEvents = 64 / 4; // CDC_DATA_FS_MAX_PACKET_SIZE, both ports run full speed
     bool                    rx_active_;
+    size_t (*queue_free_)(void*) = nullptr;
+    void*         queue_free_ctx_ = nullptr;
+    volatile bool rx_held_        = false;
     // This corresponds to 256 midi messages
     RingBuffer<uint8_t, kBufferSize> rx_buffer_;
     MidiRxParseCallback              parse_callback_;
@@ -88,6 +132,24 @@ void ReceiveCallback(uint8_t* buffer, uint32_t* length)
             midi_usb_handle.Parse();
         }
     }
+    // Runs before the class driver decides whether to re-arm the endpoint.
+    midi_usb_handle.HoldIfQueueFull();
+}
+
+void MidiUsbTransport::Impl::SetCdcRxHold(uint8_t hold)
+{
+    if(config_.periph == Config::EXTERNAL)
+        CDC_Set_Rx_Hold_HS(hold);
+    else
+        CDC_Set_Rx_Hold_FS(hold);
+}
+
+void MidiUsbTransport::Impl::CdcRxResume()
+{
+    if(config_.periph == Config::EXTERNAL)
+        CDC_Rx_Resume_HS();
+    else
+        CDC_Rx_Resume_FS();
 }
 
 static void HostReceiveCallback(uint8_t* buffer, size_t sz, void* pUser)
@@ -374,4 +436,20 @@ void MidiUsbTransport::Tx(uint8_t* buffer, size_t size)
 bool MidiUsbTransport::IsTxBusy()
 {
     return pimpl_->IsTxBusy();
+}
+
+void MidiUsbTransport::SetRxFlowControl(size_t (*queue_free)(void*),
+                                        void* context)
+{
+    pimpl_->SetRxFlowControl(queue_free, context);
+}
+
+bool MidiUsbTransport::ResumeRx()
+{
+    return pimpl_->ResumeRx();
+}
+
+bool MidiUsbTransport::RxHeld()
+{
+    return pimpl_->RxHeld();
 }

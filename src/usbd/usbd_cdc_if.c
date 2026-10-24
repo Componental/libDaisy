@@ -114,6 +114,16 @@ void                dummy_rx_callback(uint8_t* buf, uint32_t* len)
     // do nothing
 }
 
+/* Receive hold (flow control). While rx_hold_* is set, CDC_Receive_* does not
+   re-arm the OUT endpoint after handing a packet to the callback: the host
+   gets NAK and waits, nothing is lost. rx_pending_* remembers that a re-arm
+   was skipped so CDC_Rx_Resume_* can do it. Set from the receive callback
+   (OTG interrupt), cleared by the consumer. */
+static volatile uint8_t rx_hold_fs    = 0;
+static volatile uint8_t rx_hold_hs    = 0;
+static volatile uint8_t rx_pending_fs = 0;
+static volatile uint8_t rx_pending_hs = 0;
+
 /* USER CODE END PRIVATE_VARIABLES */
 
 /**
@@ -177,6 +187,8 @@ static int8_t CDC_Init_FS(void)
     /* Set Application Buffers */
     USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, 0);
     USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
+    rx_hold_fs    = 0;
+    rx_pending_fs = 0;
     if(!rx_callback_fs)
         rx_callback_fs = dummy_rx_callback;
     return (USBD_OK);
@@ -276,8 +288,14 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t* Len)
     /* USER CODE BEGIN 6 */
     //  CDC_Transmit_FS(Buf, *Len);
     USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]);
-    USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+    /* The callback runs first so it can ask for a hold (CDC_Set_Rx_Hold_FS)
+       before the endpoint is re-armed. Reception on the endpoint is blocked
+       for the duration of this function either way. */
     rx_callback_fs(Buf, Len);
+    if(rx_hold_fs)
+        rx_pending_fs = 1;
+    else
+        USBD_CDC_ReceivePacket(&hUsbDeviceFS);
 
     return (USBD_OK);
     /* USER CODE END 6 */
@@ -335,6 +353,8 @@ static int8_t CDC_Init_HS(void)
     /* Set Application Buffers */
     USBD_CDC_SetTxBuffer(&hUsbDeviceHS, UserTxBufferHS, 0);
     USBD_CDC_SetRxBuffer(&hUsbDeviceHS, UserRxBufferHS);
+    rx_hold_hs    = 0;
+    rx_pending_hs = 0;
     if(!rx_callback_hs)
         rx_callback_hs = dummy_rx_callback;
     return (USBD_OK);
@@ -432,8 +452,12 @@ static int8_t CDC_Receive_HS(uint8_t* Buf, uint32_t* Len)
     /* USER CODE BEGIN 11 */
     //CDC_Transmit_HS(Buf, *Len);
     USBD_CDC_SetRxBuffer(&hUsbDeviceHS, &Buf[0]);
-    USBD_CDC_ReceivePacket(&hUsbDeviceHS);
+    /* Callback first, so it can ask for a hold; see CDC_Receive_FS. */
     rx_callback_hs(Buf, Len);
+    if(rx_hold_hs)
+        rx_pending_hs = 1;
+    else
+        USBD_CDC_ReceivePacket(&hUsbDeviceHS);
     return (USBD_OK);
     /* USER CODE END 11 */
 }
@@ -481,6 +505,48 @@ uint8_t CDC_IsTxBusy_HS(void)
 void CDC_Set_Rx_Callback_FS(CDC_ReceiveCallback cb)
 {
     rx_callback_fs = cb;
+}
+
+void CDC_Set_Rx_Hold_FS(uint8_t hold)
+{
+    rx_hold_fs = hold;
+}
+
+void CDC_Set_Rx_Hold_HS(uint8_t hold)
+{
+    rx_hold_hs = hold;
+}
+
+/* Resume runs in the consumer's context. While a re-arm is pending no OUT
+   transfer is in flight on the endpoint, so the receive callback cannot run
+   concurrently; interrupts are still masked around the register writes so an
+   unrelated OTG interrupt cannot land in the middle of them. */
+void CDC_Rx_Resume_FS(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    rx_hold_fs = 0;
+    if(rx_pending_fs)
+    {
+        rx_pending_fs = 0;
+        USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
+        USBD_CDC_ReceivePacket(&hUsbDeviceFS);
+    }
+    __set_PRIMASK(primask);
+}
+
+void CDC_Rx_Resume_HS(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    rx_hold_hs = 0;
+    if(rx_pending_hs)
+    {
+        rx_pending_hs = 0;
+        USBD_CDC_SetRxBuffer(&hUsbDeviceHS, UserRxBufferHS);
+        USBD_CDC_ReceivePacket(&hUsbDeviceHS);
+    }
+    __set_PRIMASK(primask);
 }
 
 void CDC_Set_Rx_Callback_HS(CDC_ReceiveCallback cb)
