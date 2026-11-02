@@ -15,4 +15,4 @@
 	url = https://github.com/STMicroelectronics/stm32h7xx_hal_driver
 [submodule "Middlewares/ST/STM32_USB_Device_Library"]
 	path = Middlewares/ST/STM32_USB_Device_Library
-	url = https://github.com/STMicroelectronics/stm32_mw_usb_device
+	url = https://github.com/Componental/stm32-mw-usb-device
